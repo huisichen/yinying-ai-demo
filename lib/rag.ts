@@ -51,7 +51,9 @@ export function retrieve(query: string, topK = 4): RetrievalHit[] {
     const cueBoost = item.cues.reduce((sum, cue) => sum + (query.includes(cue) ? 8 : 0), 0);
     const score = Math.round((overlap + cueBoost) * 100) / 100;
     return {...item, score, matched};
-  }).sort((a,b) => b.score - a.score).slice(0, Math.max(1, Math.min(topK, 6)));
+  }).sort((a,b) => b.score - a.score)
+    .filter(hit => hit.score >= 6 || hit.id === 'silverfit-language-01')
+    .slice(0, Math.max(1, Math.min(topK, 6)));
 }
 
 export function buildContext(hits: RetrievalHit[]) {
