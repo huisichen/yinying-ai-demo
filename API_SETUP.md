@@ -21,11 +21,11 @@
 
 ```text
 LLM_API_KEY=
-LLM_BASE_URL=
-LLM_MODEL=
+LLM_BASE_URL=https://api.vectorengine.ai/v1
+LLM_MODEL=claude-haiku-4-5-20251001
 ```
 
-接口兼容 OpenAI 风格的 `POST {LLM_BASE_URL}/chat/completions`。三项未配置时，接口仍会运行真实检索并返回确定性的演示方案，`trace.mode` 为 `local-rag`；全部配置后为 `llm-rag`。密钥不能写入 `docs/`、浏览器代码或 Git 仓库。
+接口兼容 OpenAI 风格的 `POST {LLM_BASE_URL}/chat/completions`。当前默认按项目提供的 VectorEngine 文档配置 Claude Haiku；只要在服务端设置 `LLM_API_KEY` 即可尝试调用，也可通过另外两个变量覆盖平台和模型。密钥未配置或远端调用失败时，接口仍会运行真实检索并返回确定性的演示方案，`trace.mode` 为 `local-rag` 或 `local-rag-fallback`。密钥不能写入 `docs/`、浏览器代码或 Git 仓库。
 
 GitHub Pages 前端通过 `docs/config.js` 的 `window.YINYING_API_URL` 指向已部署的后端。GitHub Pages 只托管静态文件，无法安全保存模型密钥。
 
