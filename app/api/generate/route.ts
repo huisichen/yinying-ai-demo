@@ -27,9 +27,11 @@ function fallbackPlan(input:Input,hits:ReturnType<typeof retrieve>){
   const core=evidence?.advice||'先停下来，通过正规渠道核实，再决定是否操作。';
   const title=evidence?`${evidence.title}：先核实`:(input.topic||'这件事').includes('退款')?'退款电话，先别点':`${input.topic||'这件事'}，三步讲明白`;
   const topic=(input.topic||'陌生通知').slice(0,18);
-  const lines=age.label==='活力银发'?[['周叔',`我收到“${topic}”，先看看订单记录。`],['陌生客服','现在点链接，退款马上到账。'],['周叔','订单里没有退款提醒，这个链接可疑。'],['林老师','判断得对。先关闭页面，不要填写验证码。'],['周叔',age.line],['林老师','再拨打公开的客服电话，不回拨陌生号码。'],['周叔','官方客服说，根本没有这笔退款。'],['林老师',core],['旁白',age.closing]]:age.label==='高龄银发'?[['孙奶奶',`有人说，要办“${topic.slice(0,10)}”。`],['陌生来电','点开链接。马上办。'],['小陈','奶奶，先挂电话。'],['孙奶奶','不点链接，对吗？'],['小陈','对。验证码也不说。'],['孙奶奶',age.line],['小陈','我们再打官方电话。'],['孙奶奶','先挂断。再核实。'],['旁白',age.closing]]:[['陈阿姨',`我遇到“${topic}”，现在该怎么办？`],['陌生客服','请马上操作，晚了就来不及了。'],['王社工','先停下来。不要点链接，也不要转账。'],['陈阿姨','那我先看看订单里有没有退款记录。'],['王社工','对，再从官方应用里找客服电话。'],['陈阿姨',age.line],['王社工','官方客服确认，没有这笔退款。'],['陈阿姨','我明白了，验证码也不能告诉别人。'],['旁白',age.closing]];
-  const wanted=duration<=30?6:duration<=60?8:duration<=90?9:lines.length;
-  const visuals=['交代人物和来电情境','手机展示虚构来电页面','人物停下操作并思考','展示订单页核对动作','社区人员加入并提醒','拨打官方公开电话','确认结果并解释风险','主人公复述关键步骤','大字口令收束'];
+  const baseLines=age.label==='活力银发'?[['周叔',`我收到“${topic}”，先看看订单记录。`],['陌生客服','现在点链接，退款马上到账。'],['周叔','订单里没有退款提醒，这个链接可疑。'],['林老师','判断得对。先关闭页面，不要填写验证码。'],['周叔',age.line],['林老师','再拨打公开的客服电话，不回拨陌生号码。'],['周叔','官方客服说，根本没有这笔退款。'],['林老师',core],['旁白',age.closing]]:age.label==='高龄银发'?[['孙奶奶',`有人说，要办“${topic.slice(0,10)}”。`],['陌生来电','点开链接。马上办。'],['小陈','奶奶，先挂电话。'],['孙奶奶','不点链接，对吗？'],['小陈','对。验证码也不说。'],['孙奶奶',age.line],['小陈','我们再打官方电话。'],['孙奶奶','先挂断。再核实。'],['旁白',age.closing]]:[['陈阿姨',`我遇到“${topic}”，现在该怎么办？`],['陌生客服','请马上操作，晚了就来不及了。'],['王社工','先停下来。不要点链接，也不要转账。'],['陈阿姨','那我先看看订单里有没有退款记录。'],['王社工','对，再从官方应用里找客服电话。'],['陈阿姨',age.line],['王社工','官方客服确认，没有这笔退款。'],['陈阿姨','我明白了，验证码也不能告诉别人。'],['旁白',age.closing]];
+  const extraLines=age.label==='活力银发'?[['画面','手机页面跳出“三分钟内完成”的倒计时。'],['陌生客服','系统只保留三分钟，过时就不能退。'],['周叔','越催越可疑，我先记下订单号。'],['林老师','不要搜索对方给的号码，从平台入口找客服。'],['官方客服','平台没有这笔退款，也不会索要验证码。']]:age.label==='高龄银发'?[['画面','手机连续响起，孙奶奶有些着急。'],['陌生来电','不要告诉家人。'],['孙奶奶','为什么不能告诉家人？'],['小陈','越不让人知道，越要停下来。'],['画面','小陈把手机调成免提，一起找官方号码。']]:[['画面','手机上出现陌生链接和倒计时。'],['陌生客服','系统只等三分钟，请现在填写验证码。'],['陈阿姨','他越催，我心里越不踏实。'],['王社工','先看订单，再从平台里面找客服。'],['官方客服','我们没有这笔退款，也不会索要验证码。']];
+  const lines=[...baseLines.slice(0,3),...extraLines,...baseLines.slice(3)];
+  const wanted=duration<=30?8:duration<=60?12:duration<=90?14:lines.length;
+  const visuals=['交代人物和来电情境','手机展示虚构来电页面','人物发现订单不符','展示倒计时制造压力','陌生人继续施压','人物表达怀疑','可信角色解释危险信号','切到官方入口','关闭链接并停止操作','查找订单记录','拨打官方公开电话','官方客服确认结果','主人公复述方法','大字口令收束'];
   const shots:Shot[]=lines.slice(0,wanted).map((line,i)=>({shot:String(i+1).padStart(2,'0'),shotSize:i===1||i===wanted-1?'特写':i===4?'双人中景':'中景',camera:'固定 / 平视',visual:visuals[i]||'人物完成核实动作',dialogue:`${line[0]}：${line[1]}`,duration:Math.max(5,Math.round(duration/wanted))}));
   const script=lines.map(x=>`${x[0]}：${x[1]}`).join('\n');
   return {title,summary:`面向${age.label}：${age.story} 在${input.location||'社区服务站'}中，通过“收到信息—识别疑点—停止操作—官方核实—复述口令”的完整过程，完成${input.goal||'风险提醒'}。`,core,lines,shots,silverfit:scoreSilverFit(script,shots,actors,duration)};
@@ -46,14 +48,15 @@ async function callModel(input:Input,context:string){
   const model=process.env.LLM_MODEL||'deepseek-chat';
   if(!key)return null;
   const age=audienceProfile(input.audience),duration=numberFrom(input.duration,60);
-  const amount=duration<=30?'6—7句台词、5—6个镜头':duration<=60?'9—12句台词、8—10个镜头':duration<=90?'12—16句台词、10—12个镜头':'18—24句台词、14—18个镜头';
-  const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定证据；证据不足时明确写“需人工核实”。剧本必须有起因、诱导或问题、识别疑点、正确核实、结果确认、口令收束，不能只有问答提纲。不同年龄段必须改变人物的行动方式、协助关系、句子长度和重复方式，禁止只修改年龄标签。输出字段：title, summary, core, lines（二维数组：人物、台词）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
-  const prompt=`拍摄需求：${JSON.stringify(input)}\n受众适配：${age.label}；${age.story} 单句尽量不超过${age.maxChars}字。\n内容丰富度：${amount}；每个镜头必须对应具体动作或信息推进，结尾由主人公复述关键做法。\n\n检索证据：\n${context}`;
+  const amount=duration<=30?'8—10条剧本行、6—8个镜头':duration<=60?'14—18条剧本行、10—12个镜头':duration<=90?'20—26条剧本行、14—18个镜头':'28—36条剧本行、18—24个镜头';
+  const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定证据；证据不足时明确写“需人工核实”。剧本必须有起因、诱导或问题、连续施压、识别疑点、尝试判断、正确核实、结果反转、人物复述和口令收束，不能只有问答提纲。lines 中除人物台词外，可使用“画面”“动作”“旁白”作为角色名，加入可拍的表情、停顿、手机操作和现场反应。每一行都要承接前一行并推动情节，禁止用重复口号凑数量。不同年龄段必须改变人物的行动方式、协助关系、句子长度和重复方式，禁止只修改年龄标签。输出字段：title, summary, core, lines（二维数组：人物/画面/旁白、内容）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
+  const prompt=`拍摄需求：${JSON.stringify(input)}\n受众适配：${age.label}；${age.story} 单句尽量不超过${age.maxChars}字。\n内容丰富度：${amount}。即使是单场景，也要通过电话内容、人物反应、查订单、寻找官方入口、拨打官方电话和确认结果形成完整转折。每个镜头必须对应具体动作或新信息，结尾由主人公复述关键做法。\n\n检索证据：\n${context}`;
   const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.45,max_tokens:2600,messages:[{role:'system',content:system},{role:'user',content:prompt}]})});
   if(!res.ok)throw new Error(`模型服务返回 ${res.status}`);
   const data=await res.json() as any;
   const plan=parseModelJson(data?.choices?.[0]?.message?.content||'');
-  if(!Array.isArray(plan?.lines)||plan.lines.length<6||!Array.isArray(plan?.shots)||plan.shots.length<5)throw new Error('模型输出不完整');
+  const minLines=duration<=30?8:duration<=60?12:duration<=90?16:22,minShots=duration<=30?6:duration<=60?9:duration<=90?12:16;
+  if(!Array.isArray(plan?.lines)||plan.lines.length<minLines||!Array.isArray(plan?.shots)||plan.shots.length<minShots)throw new Error('模型输出不完整');
   plan.summary=`面向${age.label}：${age.story} ${plan.summary||''}`;
   return plan;
 }
@@ -65,8 +68,8 @@ export async function POST(request:Request){
   try{
     const input=await request.json() as Input;
     if(!input.topic?.trim())return new Response(JSON.stringify({error:'topic 不能为空'}),{status:400,headers:cors});
-    const query=[input.topic,input.audience,input.location,input.goal].filter(Boolean).join(' ');
-    const hits=retrieve(query,4),context=buildContext(hits);
+    const query=[input.topic,input.audience,input.location,input.goal,'剧本 台词 剧情 分镜'].filter(Boolean).join(' ');
+    const hits=retrieve(query,6),context=buildContext(hits);
     let modelResult:any=null,mode='local-rag';
     try{modelResult=await callModel(input,context);if(modelResult)mode='llm-rag'}catch(error){mode='local-rag-fallback';console.error(error)}
     const plan=modelResult||fallbackPlan(input,hits);
