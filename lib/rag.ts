@@ -27,6 +27,9 @@ export const corpus: CorpusItem[] = [
   {id:'fraud-prize-01',category:'prize',title:'中奖与免费礼品',text:'声称中奖或零元领取礼品，随后要求先付税费、运费、激活费，或填写个人信息。',advice:'未参与的抽奖不要相信；任何“先付款再领奖”都应停止。',cues:['中奖','免费','礼品','激活费','运费','缴税'],sourceName:'fraud-detect-bench-zh',sourceUrl:'https://github.com/uninhibited-scholar/fraud-detect-bench-zh',license:'CC BY 4.0'},
   {id:'fraud-loan-01',category:'loan',title:'贷款保证金与解冻费',text:'用低门槛贷款吸引申请，再以银行卡填错、资金冻结或验证还款能力为由收取保证金和解冻费。',advice:'正规贷款不会在放款前要求转账；立即停止付款并向正规机构核实。',cues:['贷款','放款','保证金','解冻','卡号','征信'],sourceName:'fraud-detect-bench-zh',sourceUrl:'https://github.com/uninhibited-scholar/fraud-detect-bench-zh',license:'CC BY 4.0'},
   {id:'legit-channel-01',category:'verification',title:'正规通知的核实特征',text:'正规服务通知通常给出可独立核验的订单、时间或官方热线，不索要密码和验证码，也不要求向个人账户转账。',advice:'不要回拨陌生来电提供的号码；从官方网站、官方应用或账单背面自行寻找联系方式。',cues:['官方渠道','核实','官方电话','订单','通知'],sourceName:'fraud-detect-bench-zh',sourceUrl:'https://github.com/uninhibited-scholar/fraud-detect-bench-zh',license:'CC BY 4.0'},
+  {id:'script-dialogue-01',category:'storytelling',title:'多轮中文对白：承接与推进',text:'LCCC 是经过规则与分类器清洗的大规模中文短文本对话数据，包含单轮和多轮对话，并过滤上下文不相关、语法不通等噪声。',advice:'每句台词先承接上一句，再增加一个新信息或动作；避免人物连续讲解大段知识。',cues:['剧本','台词','对白','多轮','承接','人物'],sourceName:'CDial-GPT / LCCC',sourceUrl:'https://github.com/thu-coai/CDial-GPT',license:'MIT repository'},
+  {id:'script-workflow-01',category:'storytelling',title:'短剧结构：剧本到角色、场景与分镜',text:'LocalMiniDrama 公开了从剧本到角色与场景，再到分镜编排的短剧工作流，强调列表编辑和分镜组织。',advice:'先写清人物目标和阻碍，再把每个情节点转为可拍动作；镜头不能只重复台词。',cues:['剧本','角色','场景','分镜','情节','动作'],sourceName:'LocalMiniDrama',sourceUrl:'https://github.com/xuanyustudio/LocalMiniDrama',license:'MIT'},
+  {id:'script-arc-01',category:'storytelling',title:'短剧推进：冲突、识别、核实与反转',text:'Toonflow 的开源短剧流程把故事、剧本、角色场景和分镜串联为连续创作链路。',advice:'一分钟剧情至少形成“问题出现—对方施压—发现矛盾—停止操作—独立核实—结果反转—口令收束”的完整弧线。',cues:['短剧','剧情','冲突','转折','反转','分镜'],sourceName:'Toonflow',sourceUrl:'https://github.com/HBAI-Ltd/Toonflow-app',license:'Apache-2.0'},
   {id:'silverfit-language-01',category:'silverfit',title:'适老表达：常用词与短句',text:'面向中高龄观众时，优先使用高频、具体、口语化词汇；一句表达一个动作，避免连续堆叠术语。',advice:'单句建议不超过二十字，关键动作至少重复一次，并把“去哪里、做什么”说清楚。',cues:['老人','银发','适老','短句','口语','字幕'],sourceName:'complete-hsk-vocabulary',sourceUrl:'https://github.com/drkameleon/complete-hsk-vocabulary',license:'MIT'}
 ];
 
@@ -40,9 +43,9 @@ function tokens(text: string) {
   return out;
 }
 
-export function retrieve(query: string, topK = 4): RetrievalHit[] {
+export function retrieve(query: string, topK = 6): RetrievalHit[] {
   const q = tokens(query);
-  return corpus.map(item => {
+  const ranked=corpus.map(item => {
     const body = `${item.title} ${item.text} ${item.advice} ${item.cues.join(' ')}`;
     const d = tokens(body);
     let overlap = 0;
@@ -51,9 +54,11 @@ export function retrieve(query: string, topK = 4): RetrievalHit[] {
     const cueBoost = item.cues.reduce((sum, cue) => sum + (query.includes(cue) ? 8 : 0), 0);
     const score = Math.round((overlap + cueBoost) * 100) / 100;
     return {...item, score, matched};
-  }).sort((a,b) => b.score - a.score)
-    .filter(hit => hit.score >= 6 || hit.id === 'silverfit-language-01')
-    .slice(0, Math.max(1, Math.min(topK, 6)));
+  }).sort((a,b) => b.score - a.score);
+  const topical=ranked.filter(hit=>hit.category!=='storytelling'&&hit.category!=='silverfit'&&hit.score>=6).slice(0,3);
+  const storytelling=ranked.filter(hit=>hit.category==='storytelling').slice(0,2);
+  const language=ranked.find(hit=>hit.category==='silverfit');
+  return [...topical,...storytelling,...(language?[language]:[])].slice(0,Math.max(1,Math.min(topK,6)));
 }
 
 export function buildContext(hits: RetrievalHit[]) {
