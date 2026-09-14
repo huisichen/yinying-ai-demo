@@ -37,8 +37,10 @@ function parseModelJson(text:string){
 }
 
 async function callModel(input:Input,context:string){
-  const key=process.env.LLM_API_KEY,base=(process.env.LLM_BASE_URL||'').replace(/\/$/,''),model=process.env.LLM_MODEL;
-  if(!key||!base||!model)return null;
+  const key=process.env.LLM_API_KEY;
+  const base=(process.env.LLM_BASE_URL||'https://api.vectorengine.ai/v1').replace(/\/$/,'');
+  const model=process.env.LLM_MODEL||'claude-haiku-4-5-20251001';
+  if(!key)return null;
   const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown。不要生成视频。事实与风险提示必须基于给定证据；证据不足时明确写“需人工核实”。语言面向银发观众：短句、口语、单线叙事、动作明确。输出字段：title, summary, core, lines（二维数组：人物、台词）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
   const prompt=`拍摄需求：${JSON.stringify(input)}\n\n检索证据：\n${context}`;
   const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.35,messages:[{role:'system',content:system},{role:'user',content:prompt}]})});
