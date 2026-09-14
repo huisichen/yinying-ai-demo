@@ -20,6 +20,25 @@ function normalizeShotDurations(shots:Shot[],total:number){
   return shots.map((shot,i)=>({...shot,duration:base+(i<remainder?1:0)}));
 }
 
+function ensureSceneRows(rows:unknown[],wanted:number){
+  const normalized=rows.filter(Array.isArray).map(row=>{
+    const pair=row as unknown[];
+    const role=String(pair[0]||''),content=String(pair[1]||'');
+    return role.startsWith('场景')&&role!=='场景'?['场景',`${role} · ${content}`]:[role,content];
+  });
+  const existing=normalized.filter(row=>row[0]==='场景').length;
+  if(existing>=wanted)return normalized;
+  const content=normalized.filter(row=>row[0]!=='场景');
+  const names=['场景一 · 家中客厅 · 日 · 内','场景二 · 社区服务站 · 日 · 内','场景三 · 社区公共区域 · 日 · 外','场景四 · 社区活动室 · 日 · 内'];
+  const result:string[][]=[];
+  for(let i=0;i<wanted;i++){
+    result.push(['场景',names[i]||`场景${i+1} · 社区 · 日 · 内`]);
+    const start=Math.floor(i*content.length/wanted),end=Math.floor((i+1)*content.length/wanted);
+    result.push(...content.slice(start,end));
+  }
+  return result;
+}
+
 function audienceProfile(audience=''){
   if(audience.startsWith('55'))return {label:'活力银发',story:'主人公能够独立使用手机，重点展示自主判断、主动查询订单和自行拨打官方电话；节奏稍快，但步骤必须清楚。',line:'我先关掉陌生页面，再从官方应用查订单。',closing:'先看订单，再找官方渠道，自己也能核实。',maxChars:24};
   if(audience.startsWith('80'))return {label:'高龄银发',story:'由家属或社区人员陪同确认；每句只说一个动作，避免术语和连续步骤；关键口令至少重复两次，并使用更大的提示字幕。',line:'我先不动，找家人一起看。',closing:'先挂断。找人帮忙。再核实。',maxChars:14};
@@ -67,6 +86,7 @@ async function callModel(input:Input,context:string){
   const data=await res.json() as any;
   const plan=parseModelJson(data?.choices?.[0]?.message?.content||'');
   const minLines=duration<=30?12:duration<=60?18:duration<=90?26:38,minShots=duration<=30?8:duration<=60?12:duration<=90?16:22,minScenes=duration<=30?2:duration<=90?3:4;
+  if(Array.isArray(plan?.lines))plan.lines=ensureSceneRows(plan.lines,minScenes);
   const sceneCount=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]==='场景').length:0;
   const spokenChars=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&!['场景','画面','动作'].includes(String(line[0]))).reduce((n:number,line:unknown)=>n+[...String((line as string[])[1]||'')].length,0):0;
   const minSpoken=duration<=30?60:duration<=60?130:duration<=90?200:400;
