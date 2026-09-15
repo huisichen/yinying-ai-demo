@@ -30,7 +30,7 @@ export function scoreSilverFit(script:string, shots:Shot[], actors:number, durat
   const beats=[/收到|突然|遇到|发现|想要|需要/,/马上|催|来不及|困难|担心|着急|问题/,/不对|可疑|疑问|为什么|怎么|核对/,/停|关闭|查|找|准备|记录/,/官方|医生|工作人员|核实|确认|平台|社区/,/原来|确认|完成|没有|明白|解决|举报/,/记住|先.*再|不点|不说|提醒|告诉/];
   const beatHits=beats.filter(rule=>rule.test(script)).length,sceneCount=new Set((script.match(/场景[一二三四五六\d]+/g)||[])).size;
   const narrative=clamp(45+beatHits*7+(sceneCount>=3?8:sceneCount>=2?4:0)-Math.max(0,actors-3)*4);
-  const expectedShots=duration<=30?8:duration<=60?15:duration<=90?18:24,totalShotSeconds=shots.reduce((sum,s)=>sum+Number(s.duration||0),0);
+  const expectedShots=duration<=30?8:duration<=60?24:duration<=90?30:36,totalShotSeconds=shots.reduce((sum,s)=>sum+Number(s.duration||0),0);
   const crowded=shots.filter(s=>s.dialogue.replace(/\s/g,'').length>26&&s.duration<4).length;
   const visual=clamp(98-Math.abs(shots.length-expectedShots)*2-Math.min(18,Math.abs(totalShotSeconds-duration))-crowded*5);
   const overall=Math.round(language*.3+infoLoad*.2+narrative*.3+visual*.2);
