@@ -58,12 +58,14 @@ function dialogueQualityIssue(rows:unknown[]){
   const normalized=spoken.map(text=>text.replace(/[\s，。！？、；：,.!?;:“”'‘’]/g,''));
   const duplicates=normalized.length-new Set(normalized).size;
   const fragments=spoken.filter(text=>[...text].length<7).length;
+  const metaLeak=rows.filter(row=>Array.isArray(row)&&(row as unknown[])[0]!=='场景').map(row=>String((row as unknown[])[1]||'')).filter(text=>/人物目标|人物阻碍|情节点|可拍动作|镜头不能|生成模型|工作流|创作链路|剧本结构|台词承接|避免人物连续讲解/.test(text));
   const issues=[];
   if(commaRatio<.25)issues.push('带逗号的自然复句不足25%');
   if(completeRatio<.75)issues.push('完整口播句不足75%');
   if(endings<2)issues.push('句末标点过于单一');
   if(duplicates)issues.push(`存在${duplicates}条完全重复台词`);
   if(fragments>Math.ceil(spoken.length*.12))issues.push('过短碎片句过多');
+  if(metaLeak.length)issues.push('幕后编剧指令被误写进人物台词');
   return issues.join('；');
 }
 
@@ -96,8 +98,8 @@ function expandShots(shots:Shot[],rows:string[][],total:number,wanted:number){
 function fallbackPlan(input:Input,hits:ReturnType<typeof retrieve>){
   const duration=numberFrom(input.duration,60),actors=numberFrom(input.actors,2);
   const age=audienceProfile(input.audience);
-  const evidence=hits[0];
-  const core=evidence?.advice||'先停下来，通过正规渠道核实，再决定是否操作。';
+  const evidence=hits.find(hit=>!['storytelling','silverfit'].includes(hit.category));
+  const core=evidence?.advice||'遇到拿不准的信息，先停下来，再向官方渠道或可信人员核实。';
   const title=evidence?`${evidence.title}：先核实`:(input.topic||'这件事').includes('退款')?'退款电话，先别点':`${input.topic||'这件事'}，三步讲明白`;
   const topic=(input.topic||'陌生通知').slice(0,18);
   let lines=age.label==='活力银发'?
@@ -128,7 +130,7 @@ async function callModel(input:Input,context:string){
   const age=audienceProfile(input.audience),duration=numberFrom(input.duration,60);
   const amount=duration<=30?'12—16条剧本行、8个镜头、2个场景':duration<=60?'24—30条剧情骨架行、15个核心镜头、3个场景；系统会在此基础上扩展为54—66条完整制作稿':duration<=90?'32—40条剧情骨架行、18个核心镜头、4个场景':'42—56条剧情骨架行、24个核心镜头、4—5个场景';
   const spoken=duration<=30?'70—100':duration<=60?'150—210':duration<=90?'240—330':'420—560';
-  const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定检索证据；证据不足时明确写“需人工核实”。剧本不是知识问答提纲，必须有起因、打断日常、连续施压、人物迟疑、发现矛盾、主动求助、独立核实、结果反转、事后行动和人物复述。lines 必须用["场景","场景一 · 地点 · 日/夜 · 内/外"]标出每次转场；人物行必须像["王阿姨","电话里一直催我，我想先看看订单里有没有通知。"]，画面行必须像["画面","王阿姨放下手机，拿出快递单。"]。人物台词必须是口语自然、语义完整的句子，不得把一句话机械切成“先挂断。再核实。”这样的碎片；至少四分之一的口播使用逗号连接相关分句，并自然混用句号、问号和感叹号。相邻台词要承接情绪和动作，每行提供新信息；除结尾安全提醒允许换一种说法复述一次外，不得重复相同句子、关键词串或处置步骤。绝对不能把“场景一……”填到人物台词或画面内容里。每场至少六条有效内容并承担不同任务，转场必须推动故事，禁止只换地点重复台词。不同年龄段必须改变主人公能力、协助关系、句长、节奏和复述方式，禁止只修改年龄标签。不要额外生成醒目的字幕卡。输出字段：title, summary, core, lines（二维数组：人物/场景/画面/旁白、实际内容）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
+  const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定检索证据；证据不足时明确写“需人工核实”。检索证据中的“人物目标、情节点、镜头组织、台词承接”等内容只是幕后创作方法，绝对不能原样或改写为人物台词、旁白、画面或动作。剧本必须有起因、打断日常、连续施压、人物迟疑、发现矛盾、主动求助、独立核实、结果反转、事后行动和人物复述。lines 必须用["场景","场景一 · 地点 · 日/夜 · 内/外"]标出每次转场；人物行必须像["王阿姨","电话里一直催我，我想先看看订单里有没有通知。"]，画面行必须像["画面","王阿姨放下手机，拿出快递单。"]。人物台词必须是口语自然、语义完整的句子，不得把一句话机械切成“先挂断。再核实。”这样的碎片；至少四分之一的口播使用逗号连接相关分句，并自然混用句号、问号和感叹号。相邻台词要承接情绪和动作，每行提供新信息；除结尾安全提醒允许换一种说法复述一次外，不得重复相同句子、关键词串或处置步骤。绝对不能把“场景一……”填到人物台词或画面内容里。每场至少六条有效内容并承担不同任务，转场必须推动故事，禁止只换地点重复台词。不同年龄段必须改变主人公能力、协助关系、句长、节奏和复述方式，禁止只修改年龄标签。不要额外生成醒目的字幕卡。输出字段：title, summary, core, lines（二维数组：人物/场景/画面/旁白、实际内容）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
   const prompt=`拍摄需求：${JSON.stringify(input)}\n受众适配：${age.label}；${age.story} 单句尽量不超过${age.maxChars}字。\n成片设计：${amount}；实际可朗读台词总量约${spoken}个汉字，另留动作、停顿和转场时间。60秒默认采用“家中接到信息—社区服务站核实—公共区域复述提醒”三个低成本场景；若用户给出其他地点，优先使用用户地点，并补充步行可达、易拍摄的相邻场景。每个镜头都要有具体动作或新信息，shots 的时长总和必须等于${duration}秒。\n\nRAG检索证据：\n${context}`;
   const requestPlan=async(correction='')=>{
     const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.45,max_tokens:4200,messages:[{role:'system',content:system},{role:'user',content:`${prompt}${correction}`}]})});
