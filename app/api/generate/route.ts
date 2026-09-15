@@ -84,6 +84,15 @@ function expandDetailedScript(rows:string[][],duration:number){
   return out;
 }
 
+function expandShots(shots:Shot[],rows:string[][],total:number,wanted:number){
+  if(shots.length>=wanted)return normalizeShotDurations(shots.slice(0,wanted),total);
+  const content=rows.filter(row=>row[0]!=='场景'),selected=Array.from({length:wanted},(_,i)=>content[Math.round(i*(content.length-1)/(wanted-1))]);
+  return normalizeShotDurations(selected.map((line,i)=>{
+    const original=shots.length?shots[Math.round(i*(shots.length-1)/(wanted-1))]:null;
+    return {shot:String(i+1).padStart(2,'0'),shotSize:original?.shotSize||(['动作','画面'].includes(line[0])?'特写':'中景'),camera:original?.camera||'固定 / 平视',visual:['动作','画面'].includes(line[0])?line[1]:(original?.visual||`${line[0]}完成当前剧情动作`),dialogue:['动作','画面'].includes(line[0])?'':`${line[0]}：${line[1]}`,duration:0};
+  }),total);
+}
+
 function fallbackPlan(input:Input,hits:ReturnType<typeof retrieve>){
   const duration=numberFrom(input.duration,60),actors=numberFrom(input.actors,2);
   const age=audienceProfile(input.audience);
@@ -117,27 +126,29 @@ async function callModel(input:Input,context:string){
   const model=process.env.LLM_MODEL||'deepseek-chat';
   if(!key)return null;
   const age=audienceProfile(input.audience),duration=numberFrom(input.duration,60);
-  const amount=duration<=30?'12—16条剧本行、8个镜头、2个场景':duration<=60?'54—66条剧本行、24个镜头、3个场景；每场至少16条有效内容，其中画面、动作和环境细节不少于一半':duration<=90?'72—90条剧本行、30个镜头、4个场景':'96—120条剧本行、36个镜头、4—5个场景';
-  const spoken=duration<=30?'70—100':duration<=60?'260—330':duration<=90?'400—520':'560—720';
+  const amount=duration<=30?'12—16条剧本行、8个镜头、2个场景':duration<=60?'24—30条剧情骨架行、15个核心镜头、3个场景；系统会在此基础上扩展为54—66条完整制作稿':duration<=90?'32—40条剧情骨架行、18个核心镜头、4个场景':'42—56条剧情骨架行、24个核心镜头、4—5个场景';
+  const spoken=duration<=30?'70—100':duration<=60?'150—210':duration<=90?'240—330':'420—560';
   const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定检索证据；证据不足时明确写“需人工核实”。剧本不是知识问答提纲，必须有起因、打断日常、连续施压、人物迟疑、发现矛盾、主动求助、独立核实、结果反转、事后行动和人物复述。lines 必须用["场景","场景一 · 地点 · 日/夜 · 内/外"]标出每次转场；人物行必须像["王阿姨","电话里一直催我，我想先看看订单里有没有通知。"]，画面行必须像["画面","王阿姨放下手机，拿出快递单。"]。人物台词必须是口语自然、语义完整的句子，不得把一句话机械切成“先挂断。再核实。”这样的碎片；至少四分之一的口播使用逗号连接相关分句，并自然混用句号、问号和感叹号。相邻台词要承接情绪和动作，每行提供新信息；除结尾安全提醒允许换一种说法复述一次外，不得重复相同句子、关键词串或处置步骤。绝对不能把“场景一……”填到人物台词或画面内容里。每场至少六条有效内容并承担不同任务，转场必须推动故事，禁止只换地点重复台词。不同年龄段必须改变主人公能力、协助关系、句长、节奏和复述方式，禁止只修改年龄标签。不要额外生成醒目的字幕卡。输出字段：title, summary, core, lines（二维数组：人物/场景/画面/旁白、实际内容）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
   const prompt=`拍摄需求：${JSON.stringify(input)}\n受众适配：${age.label}；${age.story} 单句尽量不超过${age.maxChars}字。\n成片设计：${amount}；实际可朗读台词总量约${spoken}个汉字，另留动作、停顿和转场时间。60秒默认采用“家中接到信息—社区服务站核实—公共区域复述提醒”三个低成本场景；若用户给出其他地点，优先使用用户地点，并补充步行可达、易拍摄的相邻场景。每个镜头都要有具体动作或新信息，shots 的时长总和必须等于${duration}秒。\n\nRAG检索证据：\n${context}`;
   const requestPlan=async(correction='')=>{
-    const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.45,max_tokens:7000,messages:[{role:'system',content:system},{role:'user',content:`${prompt}${correction}`}]})});
+    const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.45,max_tokens:4200,messages:[{role:'system',content:system},{role:'user',content:`${prompt}${correction}`}]})});
     if(!res.ok)throw new Error(`模型服务返回 ${res.status}`);
     const data=await res.json() as any;
     return parseModelJson(data?.choices?.[0]?.message?.content||'');
   };
   let plan=await requestPlan();
-  const minLines=duration<=30?12:duration<=60?50:duration<=90?66:88,minShots=duration<=30?8:duration<=60?24:duration<=90?30:36,minScenes=duration<=30?2:duration<=60?3:4;
+  const baseMinLines=duration<=30?12:duration<=60?21:duration<=90?28:38,minLines=duration<=30?12:duration<=60?50:duration<=90?66:88,baseMinShots=duration<=30?8:duration<=60?15:duration<=90?18:24,minShots=duration<=30?8:duration<=60?24:duration<=90?30:36,minScenes=duration<=30?2:duration<=60?3:4;
   if(Array.isArray(plan?.lines))plan.lines=ensureSceneRows(plan.lines,minScenes);
   let repeatedSceneText=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]!=='场景'&&/^场景[一二三四五六\d]+/.test(String(line[1]||''))).length:0;
   let qualityIssue=dialogueQualityIssue(plan?.lines);
   if(repeatedSceneText||qualityIssue){plan=await requestPlan(`\n\n上一次输出未通过剧本质量检查：${repeatedSceneText?'把场景标题错误地写进了人物台词；':''}${qualityIssue}。请完全重写人物口播：使用有逗号、有句号、有问号的完整自然句，每行增加新信息，删除重复表达；除角色为“场景”的行外，不能出现“场景一/场景二/场景三”。`);if(Array.isArray(plan?.lines))plan.lines=ensureSceneRows(plan.lines,minScenes);repeatedSceneText=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]!=='场景'&&/^场景[一二三四五六\d]+/.test(String(line[1]||''))).length:0;qualityIssue=dialogueQualityIssue(plan?.lines)}
   const sceneCount=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]==='场景').length:0;
   const spokenChars=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&!['场景','画面','动作'].includes(String(line[0]))).reduce((n:number,line:unknown)=>n+[...String((line as string[])[1]||'')].length,0):0;
-  const minSpoken=duration<=30?60:duration<=60?220:duration<=90?360:500;
-  if(!Array.isArray(plan?.lines)||plan.lines.length<minLines||!Array.isArray(plan?.shots)||plan.shots.length<minShots||sceneCount<minScenes||spokenChars<minSpoken||repeatedSceneText||qualityIssue)throw new Error(`模型输出不足以支撑目标时长${qualityIssue?`：${qualityIssue}`:''}`);
-  plan.shots=normalizeShotDurations(plan.shots,duration);
+  const minSpoken=duration<=30?60:duration<=60?130:duration<=90?200:360;
+  if(!Array.isArray(plan?.lines)||plan.lines.length<baseMinLines||!Array.isArray(plan?.shots)||plan.shots.length<baseMinShots||sceneCount<minScenes||spokenChars<minSpoken||repeatedSceneText||qualityIssue)throw new Error(`模型输出不足以支撑目标时长${qualityIssue?`：${qualityIssue}`:''}`);
+  plan.lines=expandDetailedScript(plan.lines,duration);
+  if(plan.lines.length<minLines)throw new Error('扩展后的制作稿长度不足');
+  plan.shots=expandShots(plan.shots,plan.lines,duration,minShots);
   plan.summary=`面向${age.label}：${age.story} ${plan.summary||''}`;
   return plan;
 }
