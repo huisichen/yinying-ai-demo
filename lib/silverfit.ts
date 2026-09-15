@@ -11,9 +11,18 @@ export function scoreSilverFit(script:string, shots:Shot[], actors:number, durat
   const averageLength=lengths.length?lengths.reduce((a,b)=>a+b,0)/lengths.length:0;
   const long=lengths.filter(n=>n>24).length;
   const veryLong=lengths.filter(n=>n>32).length;
+  const shortFragments=lengths.filter(n=>n<7).length;
+  const commaCount=spokenRows.filter(row=>/[，,]/.test(row.content)).length;
+  const commaRatio=spokenRows.length?commaCount/spokenRows.length:0;
+  const punctuationKinds=new Set(spokenRows.map(row=>row.content.match(/[。！？!?]$/)?.[0]).filter(Boolean)).size;
+  const normalized=spokenRows.map(row=>row.content.replace(/[\s，。！？、；：,.!?;:“”'‘’]/g,''));
+  const duplicateCount=normalized.length-new Set(normalized).size;
   const jargonHits=jargon.filter(w=>script.includes(w));
   const averagePenalty=averageLength<=18?0:averageLength<=22?5:averageLength<=26?11:averageLength<=32?20:32;
-  const language=clamp(98-averagePenalty-long*2-veryLong*3-jargonHits.length*4);
+  const fragmentPenalty=Math.max(0,shortFragments-Math.ceil(spokenRows.length*.12))*3;
+  const commaPenalty=commaRatio>=.25?0:commaRatio>=.15?5:12;
+  const punctuationPenalty=punctuationKinds>=2?0:5;
+  const language=clamp(98-averagePenalty-long*2-veryLong*3-jargonHits.length*4-fragmentPenalty-commaPenalty-punctuationPenalty-duplicateCount*8);
   const concepts=new Set((script.match(/验证码|密码|链接|转账|官方|核实|报警|就医|用药|申请|材料/g)||[])).size;
   const spokenChars=lengths.reduce((a,b)=>a+b,0),maxConcepts=Math.max(5,Math.round(duration/20)+4);
   const tooDense=Math.max(0,spokenChars-duration*5),tooSparse=Math.max(0,duration*1.7-spokenChars);
@@ -27,12 +36,16 @@ export function scoreSilverFit(script:string, shots:Shot[], actors:number, durat
   const overall=Math.round(language*.3+infoLoad*.2+narrative*.3+visual*.2);
   const issues:string[]=[];
   if(long)issues.push(`${long} 句口播超过 24 字，建议继续拆句`);
+  if(shortFragments>Math.ceil(spokenRows.length*.12))issues.push(`${shortFragments} 句口播过于零碎，建议改成带逗号的完整表达`);
+  if(commaRatio<.25)issues.push(`仅 ${Math.round(commaRatio*100)}% 的口播使用逗号，语气容易像短句堆砌`);
+  if(punctuationKinds<2)issues.push('句末标点变化不足，建议加入自然的问句或感叹句');
+  if(duplicateCount)issues.push(`发现 ${duplicateCount} 条完全重复口播，需合并或改写`);
   if(jargonHits.length)issues.push(`包含较难词语：${jargonHits.join('、')}`);
   if(crowded)issues.push(`${crowded} 个镜头字幕停留偏短`);
   if(sceneCount<3&&duration>=60)issues.push('一分钟内容建议至少使用三个场景推进');
   if(beatHits<6)issues.push('剧情起因、冲突、核实或结果仍有缺项');
   if(totalShotSeconds!==duration)issues.push(`分镜总时长为 ${totalShotSeconds} 秒，需调整到 ${duration} 秒`);
   if(!issues.length)issues.push('已通过 80 分合格线：语言、信息量、剧情和拍摄节奏均符合当前规则');
-  return {overall,dimensions:{language,infoLoad,narrative,visual},issues,metrics:{spokenLineCount:spokenRows.length,spokenChars,averageLineLength:Math.round(averageLength*10)/10,longSentenceCount:long,jargonHits,sceneCount,beatHits,shotCount:shots.length,totalShotSeconds,passLine:80},weights:{language:.3,infoLoad:.2,narrative:.3,visual:.2}};
+  return {overall,dimensions:{language,infoLoad,narrative,visual},issues,metrics:{spokenLineCount:spokenRows.length,spokenChars,averageLineLength:Math.round(averageLength*10)/10,longSentenceCount:long,shortFragmentCount:shortFragments,commaRatio:Math.round(commaRatio*100)/100,punctuationKinds,duplicateCount,jargonHits,sceneCount,beatHits,shotCount:shots.length,totalShotSeconds,passLine:80},weights:{language:.3,infoLoad:.2,narrative:.3,visual:.2}};
 }
 
