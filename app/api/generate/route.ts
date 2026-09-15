@@ -82,18 +82,23 @@ async function callModel(input:Input,context:string){
   const age=audienceProfile(input.audience),duration=numberFrom(input.duration,60);
   const amount=duration<=30?'12—16条剧本行、8个镜头、2个场景':duration<=60?'24—30条剧本行、15个镜头、3个场景；每场至少6条有效内容':duration<=90?'30—38条剧本行、18个镜头、3—4个场景':'42—56条剧本行、22—24个镜头、4—5个场景';
   const spoken=duration<=30?'70—100':duration<=60?'150—190':duration<=90?'230—300':'450—600';
-  const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定检索证据；证据不足时明确写“需人工核实”。剧本不是知识问答提纲，必须有起因、打断日常、连续施压、人物迟疑、发现矛盾、主动求助、独立核实、结果反转、事后行动和人物复述。lines 必须用["场景","场景一 · 地点 · 日/夜 · 内/外"]标出每次转场；还可用“画面”“动作”“旁白”描述可拍的表情、走动、手机操作和现场反应。每场都有明确任务，转场必须推动故事，禁止只换地点重复台词。每行承接上一行并增加新信息。不同年龄段必须改变主人公能力、协助关系、句长、节奏和复述方式，禁止只修改年龄标签。输出字段：title, summary, core, lines（二维数组：人物/场景/画面/旁白、内容）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
+  const system=`你是“银映”银发短视频拍摄方案设计师。只能输出 JSON，不输出 Markdown，不生成视频。事实与风险提示必须基于给定检索证据；证据不足时明确写“需人工核实”。剧本不是知识问答提纲，必须有起因、打断日常、连续施压、人物迟疑、发现矛盾、主动求助、独立核实、结果反转、事后行动和人物复述。lines 必须用["场景","场景一 · 地点 · 日/夜 · 内/外"]标出每次转场；人物行必须像["王阿姨","电话里一直催我，我先不点。"]，画面行必须像["画面","王阿姨放下手机，拿出快递单。"]。绝对不能把“场景一……”填到人物台词或画面内容里。每场至少六条有效内容并承担不同任务，转场必须推动故事，禁止只换地点重复台词。每行承接上一行并增加新信息。不同年龄段必须改变主人公能力、协助关系、句长、节奏和复述方式，禁止只修改年龄标签。输出字段：title, summary, core, lines（二维数组：人物/场景/画面/旁白、实际内容）, shots（对象数组：shot,shotSize,camera,visual,dialogue,duration）。`;
   const prompt=`拍摄需求：${JSON.stringify(input)}\n受众适配：${age.label}；${age.story} 单句尽量不超过${age.maxChars}字。\n成片设计：${amount}；实际可朗读台词总量约${spoken}个汉字，另留动作、停顿和转场时间。60秒默认采用“家中接到信息—社区服务站核实—公共区域复述提醒”三个低成本场景；若用户给出其他地点，优先使用用户地点，并补充步行可达、易拍摄的相邻场景。每个镜头都要有具体动作或新信息，shots 的时长总和必须等于${duration}秒。\n\nRAG检索证据：\n${context}`;
-  const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.55,max_tokens:3600,messages:[{role:'system',content:system},{role:'user',content:prompt}]})});
-  if(!res.ok)throw new Error(`模型服务返回 ${res.status}`);
-  const data=await res.json() as any;
-  const plan=parseModelJson(data?.choices?.[0]?.message?.content||'');
+  const requestPlan=async(correction='')=>{
+    const res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,temperature:.4,max_tokens:3600,messages:[{role:'system',content:system},{role:'user',content:`${prompt}${correction}`}]})});
+    if(!res.ok)throw new Error(`模型服务返回 ${res.status}`);
+    const data=await res.json() as any;
+    return parseModelJson(data?.choices?.[0]?.message?.content||'');
+  };
+  let plan=await requestPlan();
   const minLines=duration<=30?12:duration<=60?21:duration<=90?28:38,minShots=duration<=30?8:duration<=60?15:duration<=90?18:22,minScenes=duration<=30?2:duration<=90?3:4;
   if(Array.isArray(plan?.lines))plan.lines=ensureSceneRows(plan.lines,minScenes);
+  let repeatedSceneText=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]!=='场景'&&/^场景[一二三四五六\d]+/.test(String(line[1]||''))).length:0;
+  if(repeatedSceneText){plan=await requestPlan('\n\n上一次输出把场景标题错误地当作人物台词。请完全重写：除角色为“场景”的行之外，第二项必须是实际台词、动作或旁白，不能出现“场景一/场景二/场景三”。');if(Array.isArray(plan?.lines))plan.lines=ensureSceneRows(plan.lines,minScenes);repeatedSceneText=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]!=='场景'&&/^场景[一二三四五六\d]+/.test(String(line[1]||''))).length:0}
   const sceneCount=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&line[0]==='场景').length:0;
   const spokenChars=Array.isArray(plan?.lines)?plan.lines.filter((line:unknown)=>Array.isArray(line)&&!['场景','画面','动作'].includes(String(line[0]))).reduce((n:number,line:unknown)=>n+[...String((line as string[])[1]||'')].length,0):0;
   const minSpoken=duration<=30?60:duration<=60?130:duration<=90?200:400;
-  if(!Array.isArray(plan?.lines)||plan.lines.length<minLines||!Array.isArray(plan?.shots)||plan.shots.length<minShots||sceneCount<minScenes||spokenChars<minSpoken)throw new Error('模型输出不足以支撑目标时长');
+  if(!Array.isArray(plan?.lines)||plan.lines.length<minLines||!Array.isArray(plan?.shots)||plan.shots.length<minShots||sceneCount<minScenes||spokenChars<minSpoken||repeatedSceneText)throw new Error('模型输出不足以支撑目标时长');
   plan.shots=normalizeShotDurations(plan.shots,duration);
   plan.summary=`面向${age.label}：${age.story} ${plan.summary||''}`;
   return plan;
@@ -115,7 +120,7 @@ export async function POST(request:Request){
     const duration=numberFrom(input.duration,60),actors=numberFrom(input.actors,2);
     plan.shots=normalizeShotDurations((plan.shots||[]) as Shot[],duration);
     let shots=plan.shots as Shot[],script=(plan.lines||[]).map((x:string[])=>x.join('：')).join('\n'),silverfit=scoreSilverFit(script,shots,actors,duration);
-    if(modelResult&&silverfit.overall<80){plan=fallback;mode='local-rag-quality-fallback';plan.shots=normalizeShotDurations((plan.shots||[]) as Shot[],duration);shots=plan.shots;script=(plan.lines||[]).map((x:string[])=>x.join('：')).join('\n');silverfit=scoreSilverFit(script,shots,actors,duration)}
+    if(modelResult&&(silverfit.overall<80||Object.values(silverfit.dimensions).some(score=>score<75))){plan=fallback;mode='local-rag-quality-fallback';plan.shots=normalizeShotDurations((plan.shots||[]) as Shot[],duration);shots=plan.shots;script=(plan.lines||[]).map((x:string[])=>x.join('：')).join('\n');silverfit=scoreSilverFit(script,shots,actors,duration)}
     plan.silverfit=silverfit;
     return new Response(JSON.stringify({plan,sources:hits.map((h,i)=>({citation:`E${i+1}`,id:h.id,title:h.title,excerpt:h.text,advice:h.advice,sourceName:h.sourceName,sourceUrl:h.sourceUrl,license:h.license,score:h.score,matched:h.matched})),trace:{mode,retriever:'hybrid-char-bigram+cue-boost',retrieved:hits.length,latencyMs:Date.now()-started}}),{headers:cors});
   }catch(error){return new Response(JSON.stringify({error:error instanceof Error?error.message:'生成失败'}),{status:500,headers:cors})}
